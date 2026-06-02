@@ -8,7 +8,7 @@
 # - enable services (instance starts them at boot)
 set -eux
 
-dnf install -y docker awscli jq python3
+dnf install -y docker awscli jq
 systemctl enable docker
 systemctl start docker
 
@@ -133,6 +133,7 @@ After=docker.service mattermost-provision.service
 ExecStartPre=-/usr/bin/docker rm -f mattermost
 ExecStart=/usr/bin/docker run --name mattermost \
   -p 80:8065 \
+  -p 8081:8065 \
   --env-file /etc/mattermost/env \
   mattermost/mattermost-team-edition:9.5.0
 ExecStop=/usr/bin/docker stop mattermost
@@ -142,24 +143,5 @@ Restart=always
 WantedBy=multi-user.target
 UNIT
 
-# ---------- systemd: health responder on :8081 ----------
-# Only starts AFTER mattermost.service is active so that ALB doesn't mark
-# the target healthy and route traffic to :80 before Mattermost is listening.
-mkdir -p /srv/health
-echo ok > /srv/health/index.html
-cat > /etc/systemd/system/health.service <<'UNIT'
-[Unit]
-Description=Health responder on :8081 (gates ALB traffic to :80)
-Requires=mattermost.service
-After=mattermost.service
-
-[Service]
-ExecStart=/usr/bin/python3 -m http.server 8081 --directory /srv/health
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
 systemctl daemon-reload
-systemctl enable mattermost-provision.service mattermost.service health.service
+systemctl enable mattermost-provision.service mattermost.service
